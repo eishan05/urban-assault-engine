@@ -93,7 +93,8 @@ void TBridge::TryAccept()
     _pendingLevel = -1;
 
     // The client paces the loop from here on - drop the FPS cap so
-    // frames run back to back.
+    // frames run back to back. Restored on disconnect.
+    _savedFpsMaxTicks = GFX::Engine.FpsMaxTicks;
     GFX::Engine.FpsMaxTicks = 0;
 
     ypa_log_out("RL bridge: client connected\n");
@@ -108,6 +109,11 @@ void TBridge::Disconnect()
     }
 
     _pendingLevel = -1;
+
+    // A crashed client must not leave the game unpaced or invisible.
+    GFX::Engine.FpsMaxTicks = _savedFpsMaxTicks;
+    if ( ypaworld )
+        ypaworld->setYW_dontRender(false);
 
     ypa_log_out("RL bridge: client disconnected\n");
 }
@@ -318,6 +324,15 @@ bool TBridge::HandleCommand(const std::string &line, TInputState *inp, int scree
         if ( lvl < 0 )
         {
             SendLine("{\"ok\":false,\"error\":\"START needs a level id\"}");
+            return false;
+        }
+
+        // Pending levels are only applied from the menu frame; accepting
+        // START elsewhere would leave it queued for a later menu
+        // transition while the current level keeps running.
+        if ( screenMode != 1 ) // GAME_SCREEN_MODE_MENU
+        {
+            SendLine("{\"ok\":false,\"error\":\"START only valid in the menu (ABORT first)\"}");
             return false;
         }
 

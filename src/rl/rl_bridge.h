@@ -71,6 +71,7 @@ private:
     std::string _rdBuf;
 
     uint32_t _fixedDt = 20;
+    uint32_t _savedFpsMaxTicks = 0;
     bool _quit = false;
     int _pendingLevel = -1;
 

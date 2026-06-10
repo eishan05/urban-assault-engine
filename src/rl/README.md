@@ -18,7 +18,7 @@ speed is bounded only by sim cost.
 |---------|--------|--------|
 | `INFO` | no | reply with a state line |
 | `CFG k=v ...` | no | `dt=<ms>` fixed timestep (default 20), `headless=0/1` (`setYW_dontRender`), `units=0/1` and `sectors=0/1` (state verbosity), `seed=<n>` (`srand`) |
-| `START <levelID>` | yes | queue level launch; applied at the next menu frame via `envAction = ACTION_PLAY` (after `ProcessGameShell`, which clears `envAction` each frame). Keep sending `STEP` until the reply shows `mode=2` and `level.state=0` |
+| `START <levelID>` | yes | menu mode only (rejected elsewhere — `ABORT` a running level first); queues the launch, applied at the next menu frame via `envAction = ACTION_PLAY` (after `ProcessGameShell`, which clears `envAction` each frame). Keep sending `STEP` until the reply shows `mode=2`, `level.state=0`, and the requested `level.id` |
 | `STEP <s0> <s1> <s2> <btn> <key>` | yes | run one frame: `Sliders[0..2]` = turn/pitch/throttle, `btn` = `Buttons` bitmask (bit 0/1 missile, 2 minigun-held, 3 handbrake), `key` = engine keycode for `KbdLastHit/Down` (0 = none) |
 | `RESET` / `ABORT` / `SAVE` / `LOAD` | yes | set `TLevelInfo::State` to RESTART / ABORTED / SAVE / LOAD before the frame (game mode only) |
 | `QUIT` | yes | clean engine shutdown after the state reply |

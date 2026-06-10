@@ -77,6 +77,9 @@ void alCheckError(const char* file, unsigned int line)
 waldev::waldev()
 {
     _inited = false;
+    cont = NULL;
+    mutex = NULL;
+    updateThread = NULL;
 
     ALfloat ListenerOri[] = { 0.0, 0.0, 1.0,  0.0, 1.0, 0.0 };
 
@@ -117,10 +120,14 @@ waldev::~waldev()
 {
     ende = true;
 
-    int status;
-    SDL_WaitThread(updateThread, &status);
+    if (updateThread)
+    {
+        int status;
+        SDL_WaitThread(updateThread, &status);
+    }
 
-    SDL_DestroyMutex(mutex);
+    if (mutex)
+        SDL_DestroyMutex(mutex);
 
     for(std::list<CTsmpl *>::iterator it = sample_list.begin(); it != sample_list.end(); ++it)
     {
@@ -128,8 +135,10 @@ waldev::~waldev()
             delete *it;
     }
 
-    alcDestroyContext(cont);
-    alcCloseDevice(dev);
+    if (cont)
+        alcDestroyContext(cont);
+    if (dev)
+        alcCloseDevice(dev);
 }
 
 bool waldev::inited()

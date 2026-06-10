@@ -90,13 +90,14 @@ int SFXEngine::init()
         for (int i = 0; i < audio_channels; i++)
         {
             snd_channels[i].hSample = digDriver->newSample(); //miles_allocSample(digDriver);
-            snd_channels[i].hSample->setMasterVolume(audio_volume);
 
             if ( !snd_channels[i].hSample )
             {
                 audio_channels = i;
                 break;
             }
+
+            snd_channels[i].hSample->setMasterVolume(audio_volume);
         }
 
         musPlayer = digDriver->createMusicPlayer();
@@ -127,7 +128,10 @@ void SFXEngine::setMasterVolume(int vol)
     audio_volume = vol;
 
     for (int i = 0; i < audio_channels; i++)
-        snd_channels[i].hSample->setMasterVolume(audio_volume);
+    {
+        if (snd_channels[i].hSample)
+            snd_channels[i].hSample->setMasterVolume(audio_volume);
+    }
 
 //    wrapper_setVolume(digDriver, vol);
 }

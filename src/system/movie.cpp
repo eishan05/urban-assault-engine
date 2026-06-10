@@ -598,10 +598,17 @@ void TMovie::ProcessAudio()
 void TMovie::PlayMovie(const std::string &fname, int volume)
 {
     if (!OpenFile(fname))
-        return;    
+        return;
 
-    SFXEngine::SFXe.AudioStream->stop();
-    SFXEngine::SFXe.AudioStream->setMasterVolume(volume);
+    if (!SFXEngine::SFXe.AudioStream)
+    {
+        _ctx->audioStream = -1; // No audio device - play video only
+    }
+    else
+    {
+        SFXEngine::SFXe.AudioStream->stop();
+        SFXEngine::SFXe.AudioStream->setMasterVolume(volume);
+    }
     _ctx->playing = true;
     
     System::EventsAddHandler(TMovie::EventsWatcher);
@@ -663,7 +670,8 @@ void TMovie::PlayMovie(const std::string &fname, int volume)
     }
     
     System::EventsDeleteHandler(TMovie::EventsWatcher);
-    SFXEngine::SFXe.AudioStream->stop();
+    if (SFXEngine::SFXe.AudioStream)
+        SFXEngine::SFXe.AudioStream->stop();
     
     Close();
 }

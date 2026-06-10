@@ -34,6 +34,11 @@ namespace RL
  *                                     bitmask, <key> = engine keycode (0=none)
  *   RESET | ABORT | SAVE | LOAD       runs one frame after setting
  *                                     TLevelInfo::State accordingly (game mode)
+ *   PROTOS                            list vehicle prototypes, no frame
+ *   SPAWN <vid> [dx] [dz]             runs one frame; creates vehicle <vid>
+ *                                     at host station + (dx, 200, dz)
+ *                                     (default 600,600) and transfers user
+ *                                     control/view into it
  *   QUIT                              clean engine shutdown
  *
  * Engine -> client: one JSON object per line (see BuildState).

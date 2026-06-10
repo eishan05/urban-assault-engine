@@ -21,7 +21,15 @@ speed is bounded only by sim cost.
 | `START <levelID>` | yes | menu mode only (rejected elsewhere — `ABORT` a running level first); queues the launch, applied at the next menu frame via `envAction = ACTION_PLAY` (after `ProcessGameShell`, which clears `envAction` each frame). Keep sending `STEP` until the reply shows `mode=2`, `level.state=0`, and the requested `level.id` |
 | `STEP <s0> <s1> <s2> <btn> <key>` | yes | run one frame: `Sliders[0..2]` = turn/pitch/throttle, `btn` = `Buttons` bitmask (bit 0/1 missile, 2 minigun-held, 3 handbrake), `key` = engine keycode for `KbdLastHit/Down` (0 = none) |
 | `RESET` / `ABORT` / `SAVE` / `LOAD` | yes | set `TLevelInfo::State` to RESTART / ABORTED / SAVE / LOAD before the frame (game mode only) |
+| `PROTOS` | no | list vehicle prototypes (`vid`, model class, name, energy, force, mass, maxrot); needs a loaded level |
+| `SPAWN <vid> [dx] [dz]` | yes | create vehicle `<vid>` at host station + (dx, 200, dz) (default 600, 600), parent it to the host station, and transfer user control/view into it. Needed because the level-start user unit is the host-station robo, which ignores manual driving input. The parent link is required — AI targeting (`GetEnemyCandidateInSector`) dereferences `_parent` unconditionally |
 | `QUIT` | yes | clean engine shutdown after the state reply |
+
+Vehicle death aborts the mission back to the menu (the engine treats the
+loss of the user's vehicle that way headless); clients should detect the
+mode change and `START` again. On client disconnect the FPS cap is
+restored but rendering stays off — re-enabling it under SDL's dummy
+video driver (no GL context) would crash the render path.
 
 All other input fields are zeroed each stepped frame, so the real
 keyboard/mouse cannot perturb a connected session.

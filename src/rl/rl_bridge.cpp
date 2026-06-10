@@ -6,6 +6,7 @@
 #include "../system/inpt.h"
 #include "../system/gfx.h"
 #include "../ypabact.h"
+#include "../yparobo.h"
 
 #include "rl_bridge.h"
 
@@ -110,10 +111,10 @@ void TBridge::Disconnect()
 
     _pendingLevel = -1;
 
-    // A crashed client must not leave the game unpaced or invisible.
+    // A crashed client must not leave the game unpaced. Rendering is
+    // deliberately NOT re-enabled here: under SDL's dummy video driver
+    // there is no GL context, and resuming RenderGame would segfault.
     GFX::Engine.FpsMaxTicks = _savedFpsMaxTicks;
-    if ( ypaworld )
-        ypaworld->setYW_dontRender(false);
 
     ypa_log_out("RL bridge: client disconnected\n");
 }
@@ -359,6 +360,100 @@ bool TBridge::HandleCommand(const std::string &line, TInputState *inp, int scree
             li.State = TLevelInfo::STATE_SAVE;
         else
             li.State = TLevelInfo::STATE_LOAD;
+
+        *inp = TInputState();
+        return true;
+    }
+
+    if ( cmd == "PROTOS" )
+    {
+        if ( !ypaworld || ypaworld->_vhclProtos.empty() )
+        {
+            SendLine("{\"ok\":false,\"error\":\"no vehicle prototypes loaded (start a level)\"}");
+            return false;
+        }
+
+        std::string s = "{\"ok\":true,\"protos\":[";
+        bool first = true;
+        for ( size_t i = 0; i < ypaworld->_vhclProtos.size(); i++ )
+        {
+            const World::TVhclProto &p = ypaworld->_vhclProtos[i];
+            if ( p.model_id <= 0 )
+                continue;
+
+            if ( !first )
+                s += ",";
+            first = false;
+            s += fmt::sprintf("{\"vid\":%u,\"model\":%d,\"name\":\"%s\",\"energy\":%d,"
+                              "\"force\":%.1f,\"mass\":%.1f,\"maxrot\":%.4f}",
+                              i, p.model_id, p.name, p.energy, p.force, p.mass, p.maxrot);
+        }
+        s += "]}";
+        SendLine(s);
+        return false;
+    }
+
+    if ( cmd == "SPAWN" )
+    {
+        // Create a vehicle next to the user's host station and put the
+        // player into it (the level-start user unit is the host station
+        // robo, which ignores manual driving input).
+        int vid = -1;
+        ss >> vid;
+
+        float dx, dz;
+        const float dy = 200.0;
+        if ( !(ss >> dx) )
+            dx = 600.0;
+        if ( !(ss >> dz) )
+            dz = 600.0;
+
+        NC_STACK_ypabact *robo = ypaworld ? ypaworld->_userRobo : NULL;
+
+        if ( screenMode != 2 || !robo )
+        {
+            SendLine("{\"ok\":false,\"error\":\"SPAWN needs a running level\"}");
+            return false;
+        }
+
+        if ( vid < 0 || (size_t)vid >= ypaworld->_vhclProtos.size() ||
+             ypaworld->_vhclProtos[vid].model_id <= 0 )
+        {
+            SendLine(fmt::sprintf("{\"ok\":false,\"error\":\"bad vehicle id %d\"}", vid));
+            return false;
+        }
+
+        ypaworld_arg146 arg146;
+        arg146.vehicle_id = vid;
+        arg146.pos = robo->_position + vec3d(dx, dy, dz);
+
+        NC_STACK_ypabact *unit = ypaworld->ypaworld_func146(&arg146);
+        if ( !unit )
+        {
+            SendLine(fmt::sprintf("{\"ok\":false,\"error\":\"vehicle %d creation failed\"}", vid));
+            return false;
+        }
+
+        unit->_owner = robo->_owner;
+        unit->_host_station = static_cast<NC_STACK_yparobo *>(robo);
+        unit->setBACT_bactCollisions(robo->getBACT_bactCollisions());
+
+        // Parent it to the host station (squad-leader position in the
+        // unit hierarchy). AI code like GetEnemyCandidateInSector
+        // dereferences _parent unconditionally for non-robo units; a
+        // parentless vehicle segfaults the sim as soon as an enemy
+        // enters sensor range.
+        robo->AddSubject(unit);
+
+        NC_STACK_ypabact *prev = ypaworld->_userUnit;
+        if ( prev )
+        {
+            prev->setBACT_inputting(false);
+            prev->setBACT_viewer(false);
+        }
+
+        unit->setBACT_viewer(true);
+        unit->setBACT_inputting(true);
 
         *inp = TInputState();
         return true;

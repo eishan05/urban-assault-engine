@@ -193,6 +193,27 @@ static std::string JsonEscape(const std::string &in)
     return out;
 }
 
+// A default TInputState has HotKeyID = 0, but 0 is a *valid* hotkey
+// (binding 0 = order mode) — "no hotkey" is -1 (see QueryInput /
+// PlayIntroMovie). Without this, every bridge frame pressed hotkey 0.
+// The virtual mouse is parked at screen centre: a zeroed position
+// pins it to the top-left corner, which drags the flight-HUD aim
+// crosshair (drawn at the mouse position) off into the corner.
+static void ClearInput(TInputState *inp)
+{
+    *inp = TInputState();
+    inp->HotKeyID = -1;
+
+    if ( ypaworld )
+    {
+        Common::Point centre(ypaworld->_screenSize.x / 2,
+                             ypaworld->_screenSize.y / 2);
+        inp->ClickInf.move.ScreenPos = centre;
+        inp->ClickInf.ldw_pos.ScreenPos = centre;
+        inp->ClickInf.lup_pos.ScreenPos = centre;
+    }
+}
+
 static void AppendUnit(std::string *s, NC_STACK_ypabact *u)
 {
     *s += fmt::sprintf("{\"gid\":%u,\"ty\":%d,\"vid\":%d,\"own\":%d,\"st\":%d,"
@@ -329,7 +350,11 @@ bool TBridge::HandleCommand(const std::string &line, TInputState *inp, int scree
         int key = 0;
         ss >> s0 >> s1 >> s2 >> btn >> key;
 
-        *inp = TInputState();
+        int hotkey;
+        if ( !(ss >> hotkey) )
+            hotkey = -1;
+
+        ClearInput(inp);
         inp->Sliders[0] = s0;
         inp->Sliders[1] = s1;
         inp->Sliders[2] = s2;
@@ -345,6 +370,10 @@ bool TBridge::HandleCommand(const std::string &line, TInputState *inp, int scree
             inp->KbdLastHit = key;
             inp->KbdLastDown = key;
         }
+
+        // engine hotkey binding id (e.g. 20 = jump to next commander,
+        // 21 = return to host station), -1 = none
+        inp->HotKeyID = hotkey;
 
         return true;
     }
@@ -370,7 +399,7 @@ bool TBridge::HandleCommand(const std::string &line, TInputState *inp, int scree
         }
 
         _pendingLevel = lvl;
-        *inp = TInputState();
+        ClearInput(inp);
         return true;
     }
 
@@ -393,7 +422,7 @@ bool TBridge::HandleCommand(const std::string &line, TInputState *inp, int scree
         else
             li.State = TLevelInfo::STATE_LOAD;
 
-        *inp = TInputState();
+        ClearInput(inp);
         return true;
     }
 
@@ -456,27 +485,28 @@ bool TBridge::HandleCommand(const std::string &line, TInputState *inp, int scree
             return false;
         }
 
-        ypaworld_arg146 arg146;
-        arg146.vehicle_id = vid;
-        arg146.pos = robo->_position + vec3d(dx, dy, dz);
+        // Create the vehicle through the same path level loading uses
+        // for mission-defined squads (MakeSquad): proper command id,
+        // parent link, host station, aggression, target. Anything less
+        // leaves HUD/squad bookkeeping inconsistent (and a missing
+        // _parent segfaults AI targeting).
+        NC_STACK_yparobo *probo = dynamic_cast<NC_STACK_yparobo *>(robo);
+        if ( !probo )
+        {
+            SendLine("{\"ok\":false,\"error\":\"user host station is not a robo\"}");
+            return false;
+        }
 
-        NC_STACK_ypabact *unit = ypaworld->ypaworld_func146(&arg146);
-        if ( !unit )
+        vec3d pos = robo->_position + vec3d(dx, dy, dz);
+        if ( !probo->MakeSquad(std::vector<int>{vid}, pos, true) )
         {
             SendLine(fmt::sprintf("{\"ok\":false,\"error\":\"vehicle %d creation failed\"}", vid));
             return false;
         }
 
-        unit->_owner = robo->_owner;
-        unit->_host_station = static_cast<NC_STACK_yparobo *>(robo);
-        unit->setBACT_bactCollisions(robo->getBACT_bactCollisions());
-
-        // Parent it to the host station (squad-leader position in the
-        // unit hierarchy). AI code like GetEnemyCandidateInSector
-        // dereferences _parent unconditionally for non-robo units; a
-        // parentless vehicle segfaults the sim as soon as an enemy
-        // enters sensor range.
-        robo->AddSubject(unit);
+        // MakeSquad adds the new squad commander at the front of the
+        // host station's kid list
+        NC_STACK_ypabact *unit = probo->_kidList.front();
 
         NC_STACK_ypabact *prev = ypaworld->_userUnit;
         if ( prev && prev != unit )
@@ -489,14 +519,26 @@ bool TBridge::HandleCommand(const std::string &line, TInputState *inp, int scree
             unit->setBACT_inputting(true);
         }
 
-        *inp = TInputState();
+        // Flight mouse-capture mode, as when a player flies a vehicle:
+        // the HUD shows the centred aim crosshair instead of the
+        // windowed mouse pointer.
+        ypaworld->_mouseGrabbed = true;
+
+        // Rest the aim straight ahead. The HUD crosshair is drawn at
+        // (-_gun_leftright, -_gun_angle_user); with no mouse-aim input
+        // it would sit frozen at the prototype's default gun angle,
+        // visibly off-centre for the whole session.
+        unit->_gun_leftright = 0.0;
+        unit->_gun_angle_user = 0.0;
+
+        ClearInput(inp);
         return true;
     }
 
     if ( cmd == "QUIT" )
     {
         _quit = true;
-        *inp = TInputState();
+        ClearInput(inp);
         return true;
     }
 

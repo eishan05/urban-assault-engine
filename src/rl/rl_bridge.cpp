@@ -18,6 +18,12 @@
 #include <errno.h>
 #endif
 
+// The game UI's "jump into unit" handler (yw_game_ui.cpp): swaps
+// viewer/inputting, closes the unit-info GUI windows, and plays the
+// transfer voice cue. Used by SPAWN so a bridge-spawned vehicle gets
+// the same clean first-person view as a GUI jump.
+void sb_0x4c66f8(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact1, NC_STACK_ypabact *bact2);
+
 namespace RL
 {
 
@@ -473,14 +479,15 @@ bool TBridge::HandleCommand(const std::string &line, TInputState *inp, int scree
         robo->AddSubject(unit);
 
         NC_STACK_ypabact *prev = ypaworld->_userUnit;
-        if ( prev )
+        if ( prev && prev != unit )
         {
-            prev->setBACT_inputting(false);
-            prev->setBACT_viewer(false);
+            sb_0x4c66f8(ypaworld, unit, prev);
         }
-
-        unit->setBACT_viewer(true);
-        unit->setBACT_inputting(true);
+        else
+        {
+            unit->setBACT_viewer(true);
+            unit->setBACT_inputting(true);
+        }
 
         *inp = TInputState();
         return true;

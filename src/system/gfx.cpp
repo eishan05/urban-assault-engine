@@ -1428,12 +1428,18 @@ int GFXEngine::raster_func208(TileMap *t)
 
 void GFXEngine::ProcessDrawSeq(const CmdStream &drawSeq, const CmdIncludes *includes)
 {
+    // An empty sequence draws nothing; the parser below reads the first
+    // byte unconditionally and would throw on an empty buffer (e.g. a
+    // HUD panel whose per-frame command buffer was not filled).
+    if ( drawSeq.empty() )
+        return;
+
     struct CmdStkEntr
     {
         const CmdStream &seq;
         const int32_t pos;
     };
-    
+
     int v11;
 
     int bytesPerColor = Screen()->format->BytesPerPixel;

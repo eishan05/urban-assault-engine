@@ -7,6 +7,7 @@
 #include "../system/gfx.h"
 #include "../ypabact.h"
 #include "../yparobo.h"
+#include "../yw_internal.h"
 
 #include "rl_bridge.h"
 
@@ -23,6 +24,11 @@
 // transfer voice cue. Used by SPAWN so a bridge-spawned vehicle gets
 // the same clean first-person view as a GUI jump.
 void sb_0x4c66f8(NC_STACK_ypaworld *yw, NC_STACK_ypabact *bact1, NC_STACK_ypabact *bact2);
+
+// The strategic map window (global in yw_game_ui.cpp; yw_game.cpp
+// externs it the same way). Open by default in robo mode and carried
+// over into the flight view, where a player would close it.
+extern tehMap robo_map;
 
 namespace RL
 {
@@ -523,6 +529,9 @@ bool TBridge::HandleCommand(const std::string &line, TInputState *inp, int scree
         // the HUD shows the centred aim crosshair instead of the
         // windowed mouse pointer.
         ypaworld->_mouseGrabbed = true;
+
+        // Close the strategic map window carried over from robo mode
+        ypaworld->GuiWinClose(&robo_map);
 
         // Rest the aim straight ahead. The HUD crosshair is drawn at
         // (-_gun_leftright, -_gun_angle_user); with no mouse-aim input

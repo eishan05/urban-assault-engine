@@ -44,6 +44,7 @@
 #include "system/movie.h"
 #include "system/inivals.h"
 #include "obj3d.h"
+#include "rl/rl_bridge.h"
 
 
 int dword_513638 = 0;
@@ -303,7 +304,9 @@ int ProcessMenuFrame()
     userdata.Input = &input_states;
 
     ypaworld->ProcessGameShell();
-    
+
+    RL::Bridge.ApplyMenuAction(&userdata);
+
     if ( userdata.envAction.action == EnvAction::ACTION_QUIT )
         return 0;
     else if ( userdata.envAction.action == EnvAction::ACTION_PLAY )
@@ -438,7 +441,9 @@ int ProcessNextFrame()
     }
 
     input_states.Period++;
-    
+
+    RL::Bridge.PreFrame(&input_states, (int)GameScreenMode);
+
     world_update_arg.DTime = input_states.Period;
     world_update_arg.field_8 = &input_states;
 
@@ -453,19 +458,22 @@ int ProcessNextFrame()
     
     Gui::Root::Instance.TimersUpdate( input_states.Period );
 
+    int frameResult = 1;
+
     if ( GameScreenMode == GAME_SCREEN_MODE_MENU )
     {
-        return ProcessMenuFrame();
+        frameResult = ProcessMenuFrame();
     }
     else if ( GameScreenMode == GAME_SCREEN_MODE_GAME )
     {
-        return ProcessGameplayFrame();
+        frameResult = ProcessGameplayFrame();
     }
     else if ( GameScreenMode == GAME_SCREEN_MODE_REPLAY )
     {
-        return ProcessReplayFrame();
+        frameResult = ProcessReplayFrame();
     }
-    return 1;
+
+    return RL::Bridge.PostFrame(frameResult, (int)GameScreenMode);
 }
 
 int init_classesLists_and_variables()

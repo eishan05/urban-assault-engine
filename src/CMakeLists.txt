@@ -50,6 +50,7 @@ set(SOURCES
 	netlib/single.cpp
 	netlib/single_threads.cpp
 	netlib/zndNet.cpp
+	rl/rl_bridge.cpp
 	nucleas.cpp
 	obj3d.cpp
 	particle.cpp

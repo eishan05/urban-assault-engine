@@ -161,6 +161,32 @@ void TBridge::SendLine(const std::string &line)
     }
 }
 
+// Escape a string for embedding in a JSON string literal (quotes,
+// backslashes, control characters). Prototype names and echoed client
+// tokens are not guaranteed to be JSON-safe (mods, localization).
+static std::string JsonEscape(const std::string &in)
+{
+    std::string out;
+    out.reserve(in.size());
+    for ( unsigned char c : in )
+    {
+        if ( c == '"' || c == '\\' )
+        {
+            out += '\\';
+            out += c;
+        }
+        else if ( c < 0x20 )
+        {
+            out += fmt::sprintf("\\u%04x", (int)c);
+        }
+        else
+        {
+            out += c;
+        }
+    }
+    return out;
+}
+
 static void AppendUnit(std::string *s, NC_STACK_ypabact *u)
 {
     *s += fmt::sprintf("{\"gid\":%u,\"ty\":%d,\"vid\":%d,\"own\":%d,\"st\":%d,"
@@ -386,7 +412,8 @@ bool TBridge::HandleCommand(const std::string &line, TInputState *inp, int scree
             first = false;
             s += fmt::sprintf("{\"vid\":%u,\"model\":%d,\"name\":\"%s\",\"energy\":%d,"
                               "\"force\":%.1f,\"mass\":%.1f,\"maxrot\":%.4f}",
-                              i, p.model_id, p.name, p.energy, p.force, p.mass, p.maxrot);
+                              i, p.model_id, JsonEscape(p.name), p.energy,
+                              p.force, p.mass, p.maxrot);
         }
         s += "]}";
         SendLine(s);
@@ -466,7 +493,7 @@ bool TBridge::HandleCommand(const std::string &line, TInputState *inp, int scree
         return true;
     }
 
-    SendLine(fmt::sprintf("{\"ok\":false,\"error\":\"unknown command %s\"}", cmd));
+    SendLine(fmt::sprintf("{\"ok\":false,\"error\":\"unknown command %s\"}", JsonEscape(cmd)));
     return false;
 }
 

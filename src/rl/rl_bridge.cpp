@@ -220,6 +220,32 @@ static void ClearInput(TInputState *inp)
     }
 }
 
+// March a ray through the world's collision geometry (buildings /
+// objects) in 300-unit segments — ypaworld_func136 only resolves
+// transitions between adjacent 300-unit grid cells, which is also how
+// the game's own dodge AI probes (ypaflyer.cpp). Returns the hit
+// distance, or range if clear.
+static float ProbeRay(const vec3d &from, const vec3d &dir, float range)
+{
+    const float SEG = 300.0;
+
+    for ( float off = 0.0; off < range; off += SEG )
+    {
+        ypaworld_arg136 a;
+        a.isect = false;
+        a.flags = 0;
+        a.stPos = from + dir * off;
+        a.vect = dir * SEG;
+
+        ypaworld->ypaworld_func136(&a);
+
+        if ( a.isect && a.tVal <= 1.0 )
+            return off + a.tVal * SEG;
+    }
+
+    return range;
+}
+
 static void AppendUnit(std::string *s, NC_STACK_ypabact *u)
 {
     *s += fmt::sprintf("{\"gid\":%u,\"ty\":%d,\"vid\":%d,\"own\":%d,\"st\":%d,"
@@ -250,7 +276,7 @@ std::string TBridge::BuildState(int screenMode)
                                   "\"st\":%d,\"e\":%d,\"em\":%d,"
                                   "\"p\":[%.3f,%.3f,%.3f],\"v\":[%.3f,%.3f,%.3f],"
                                   "\"rot\":[%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f],"
-                                  "\"sec\":[%d,%d],\"sec_h\":%.1f}",
+                                  "\"sec\":[%d,%d],\"sec_h\":%.1f",
                                   u->_gid, u->_bact_type, (int)u->_vehicleID, (int)u->_owner,
                                   (int)u->_status, u->_energy, u->_energy_max,
                                   u->_position.x, u->_position.y, u->_position.z,
@@ -260,6 +286,37 @@ std::string TBridge::BuildState(int screenMode)
                                   u->_rotation.m20, u->_rotation.m21, u->_rotation.m22,
                                   u->_cellId.x, u->_cellId.y,
                                   u->_pSector ? u->_pSector->averg_height : 0.0);
+
+                // obstacle probes: forward, yaw +/-25 deg, forward-down
+                // ~20 deg, straight down (same trace the dodge AI uses)
+                {
+                    const float RANGE = 1500.0;
+                    const float C = 0.90631, S = 0.42262;     // 25 deg
+                    const float CD = 0.93969, SD = 0.34202;   // 20 deg
+
+                    vec3d fwd(u->_rotation.m20, u->_rotation.m21, u->_rotation.m22);
+
+                    vec3d dirs[5] = {
+                        fwd,
+                        vec3d(fwd.x * C - fwd.z * S, fwd.y, fwd.z * C + fwd.x * S),
+                        vec3d(fwd.x * C + fwd.z * S, fwd.y, fwd.z * C - fwd.x * S),
+                        vec3d(fwd.x * CD, fwd.y * CD - SD, fwd.z * CD),
+                        vec3d(0.0, -1.0, 0.0),
+                    };
+
+                    s += ",\"probes\":[";
+                    for ( int i = 0; i < 5; i++ )
+                        s += fmt::sprintf(i ? ",%.1f" : "%.1f",
+                                          ProbeRay(u->_position, dirs[i], RANGE));
+                    s += "]";
+                }
+
+                // actual displacement this sim tick — collisions block
+                // motion without causing damage, so |pos - old_pos|
+                // collapsing while velocity stays high marks an impact
+                s += fmt::sprintf(",\"disp\":%.3f", (u->_position - u->_old_pos).length());
+
+                s += "}";
             }
 
             NC_STACK_ypabact *r = ypaworld->_userRobo;

@@ -231,22 +231,39 @@ iDir *iDir::_scanDir(iDir *_node, const std::string &_name, const std::string &_
 
     for (dirent *ent = readdir(dr); ent; ent = readdir(dr))
     {
-        if (ent->d_type == DT_REG || ent->d_type == DT_DIR)
-        {
-            if ( strcmp(ent->d_name, ".") != 0 && strcmp(ent->d_name, "..") != 0 )
-            {
-                std::string tmp2 = tmp + ent->d_name;
+        if ( strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0 )
+            continue;
 
-                if (ent->d_type == DT_REG)
-                {
-                    ndr->addNode(new iFile(ent->d_name, tmp2) );
-                }
-                else
-                {
-                    iNode *sub = _scanDir(NULL, ent->d_name, tmp2, ndr);
-                    if (sub)
-                        ndr->addNode(sub);
-                }
+        unsigned char dtype = ent->d_type;
+
+        // symlinked game-dir entries report DT_LNK (and some filesystems
+        // return DT_UNKNOWN for everything) - resolve with stat() so they
+        // aren't silently skipped
+        if (dtype == DT_LNK || dtype == DT_UNKNOWN)
+        {
+            struct stat st;
+            if ( stat((tmp + ent->d_name).c_str(), &st) == 0 )
+            {
+                if ( S_ISREG(st.st_mode) )
+                    dtype = DT_REG;
+                else if ( S_ISDIR(st.st_mode) )
+                    dtype = DT_DIR;
+            }
+        }
+
+        if (dtype == DT_REG || dtype == DT_DIR)
+        {
+            std::string tmp2 = tmp + ent->d_name;
+
+            if (dtype == DT_REG)
+            {
+                ndr->addNode(new iFile(ent->d_name, tmp2) );
+            }
+            else
+            {
+                iNode *sub = _scanDir(NULL, ent->d_name, tmp2, ndr);
+                if (sub)
+                    ndr->addNode(sub);
             }
         }
     }

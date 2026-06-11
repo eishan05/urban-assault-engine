@@ -122,6 +122,7 @@ void TBridge::Disconnect()
     }
 
     _pendingLevel = -1;
+    _stepRepeat = 0;
 
     // A crashed client must not leave the game unpaced. Rendering is
     // deliberately NOT re-enabled here: under SDL's dummy video driver
@@ -418,27 +419,24 @@ bool TBridge::HandleCommand(const std::string &line, TInputState *inp, int scree
         if ( !(ss >> hotkey) )
             hotkey = -1;
 
-        ClearInput(inp);
-        inp->Sliders[0] = s0;
-        inp->Sliders[1] = s1;
-        inp->Sliders[2] = s2;
-
-        for ( unsigned int i = 0; i < 32; i++ )
+        int rep = 1;
+        if ( ss >> rep )
         {
-            if ( btn & (1u << i) )
-                inp->Buttons.Set(i);
+            if ( rep < 1 )
+                rep = 1;
+            else if ( rep > 64 )
+                rep = 64;
         }
 
-        if ( key > 0 )
-        {
-            inp->KbdLastHit = key;
-            inp->KbdLastDown = key;
-        }
+        _stepSliders[0] = s0;
+        _stepSliders[1] = s1;
+        _stepSliders[2] = s2;
+        _stepBtn = btn;
+        _stepKey = key;
+        _stepHotkey = hotkey;
+        _stepRepeat = rep - 1;
 
-        // engine hotkey binding id (e.g. 20 = jump to next commander,
-        // 21 = return to host station), -1 = none
-        inp->HotKeyID = hotkey;
-
+        ApplyStepInput(inp);
         return true;
     }
 
@@ -613,6 +611,30 @@ bool TBridge::HandleCommand(const std::string &line, TInputState *inp, int scree
     return false;
 }
 
+void TBridge::ApplyStepInput(TInputState *inp)
+{
+    ClearInput(inp);
+    inp->Sliders[0] = _stepSliders[0];
+    inp->Sliders[1] = _stepSliders[1];
+    inp->Sliders[2] = _stepSliders[2];
+
+    for ( unsigned int i = 0; i < 32; i++ )
+    {
+        if ( _stepBtn & (1u << i) )
+            inp->Buttons.Set(i);
+    }
+
+    if ( _stepKey > 0 )
+    {
+        inp->KbdLastHit = _stepKey;
+        inp->KbdLastDown = _stepKey;
+    }
+
+    // engine hotkey binding id (e.g. 20 = jump to next commander,
+    // 21 = return to host station), -1 = none
+    inp->HotKeyID = _stepHotkey;
+}
+
 void TBridge::PreFrame(TInputState *inp, int screenMode)
 {
     if ( !_envChecked )
@@ -635,6 +657,15 @@ void TBridge::PreFrame(TInputState *inp, int screenMode)
         TryAccept();
         if ( _clientFd < 0 )
             return;
+    }
+
+    // mid-batch STEP frame: re-run the saved input, no command read
+    if ( _stepRepeat > 0 )
+    {
+        _stepRepeat--;
+        ApplyStepInput(inp);
+        inp->Period = _fixedDt;
+        return;
     }
 
     for (;;)
@@ -676,6 +707,10 @@ void TBridge::ApplyMenuAction(UserData *usr)
 int TBridge::PostFrame(int ret, int screenMode)
 {
     if ( _clientFd < 0 )
+        return ret;
+
+    // one reply per STEP batch, after its last frame
+    if ( _stepRepeat > 0 )
         return ret;
 
     SendLine(BuildState(screenMode));

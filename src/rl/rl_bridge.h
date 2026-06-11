@@ -29,9 +29,15 @@ namespace RL
  *                                       seed=<n>     srand(n)
  *   START <levelID>                   runs one frame; level launch is applied
  *                                     at the next menu frame
- *   STEP <s0> <s1> <s2> <btn> <key>   runs one frame with Sliders[0..2] =
- *                                     turn/pitch/throttle, <btn> = Buttons
- *                                     bitmask, <key> = engine keycode (0=none)
+ *   STEP <s0> <s1> <s2> <btn> <key> [hotkey] [n]
+ *                                     runs n frames (default 1, max 64) with
+ *                                     Sliders[0..2] = turn/pitch/throttle,
+ *                                     <btn> = Buttons bitmask, <key> = engine
+ *                                     keycode (0=none), [hotkey] = hotkey
+ *                                     binding id (-1=none); the same input is
+ *                                     applied every frame and one state reply
+ *                                     is sent after the last (frame-skip
+ *                                     batching without socket round-trips)
  *   RESET | ABORT | SAVE | LOAD       runs one frame after setting
  *                                     TLevelInfo::State accordingly (game mode)
  *   PROTOS                            list vehicle prototypes, no frame
@@ -67,6 +73,8 @@ private:
     void SendLine(const std::string &line);
     // true if the command consumes a frame
     bool HandleCommand(const std::string &line, TInputState *inp, int screenMode);
+    // (re)apply the last STEP's parsed input to a fresh frame's input state
+    void ApplyStepInput(TInputState *inp);
     std::string BuildState(int screenMode);
 
     bool _envChecked = false;
@@ -79,6 +87,14 @@ private:
     uint32_t _savedFpsMaxTicks = 0;
     bool _quit = false;
     int _pendingLevel = -1;
+
+    // STEP repeat state: remaining mid-batch frames re-run the saved
+    // input without reading a command or sending a reply
+    int _stepRepeat = 0;
+    float _stepSliders[3] = {0.0f, 0.0f, 0.0f};
+    uint32_t _stepBtn = 0;
+    int _stepKey = 0;
+    int _stepHotkey = -1;
 
     bool _obsUnits = true;
     bool _obsSectors = false;

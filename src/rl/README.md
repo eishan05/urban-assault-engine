@@ -23,6 +23,7 @@ speed is bounded only by sim cost.
 | `RESET` / `ABORT` / `SAVE` / `LOAD` | yes | set `TLevelInfo::State` to RESTART / ABORTED / SAVE / LOAD before the frame (game mode only) |
 | `PROTOS` | no | list vehicle prototypes (`vid`, model class, name, energy, force, mass, maxrot); needs a loaded level |
 | `SPAWN <vid> [dx] [dz]` | yes | create vehicle `<vid>` at host station + (dx, 200, dz) (default 600, 600), parent it to the host station, and transfer user control/view into it. Needed because the level-start user unit is the host-station robo, which ignores manual driving input. The parent link is required — AI targeting (`GetEnemyCandidateInSector`) dereferences `_parent` unconditionally |
+| `ENEMY <vid> [dx] [dz]` | no | create vehicle `<vid>` owned by the first enemy faction that has a host-station robo, at the *user's* host station + (dx, 200, dz) (default −600, −600), no control transfer — a combat target for the RL env. Spawned through the enemy robo's `MakeSquad`, so it gets live AI (aggression 60, guarding its spawn cell — it shoots back when approached). Replies `{ok, gid, own, e, em}`; track damage/kills via the `units` array (`e` drops, dead units vanish) |
 | `QUIT` | yes | clean engine shutdown after the state reply |
 
 Vehicle death aborts the mission back to the menu (the engine treats the
@@ -46,7 +47,9 @@ Single JSON object:
 - `robo` — host station gid, energy/max, position, sector
 - `units` (if `units=1`, default on) — every live unit: gid, type (`ty`),
   vehicle id (`vid`), owner (`own`), status (`st`), energy (`e`/`em`),
-  position (`p`)
+  position (`p`), velocity (`v`). The world's `_unitsList` holds only the
+  host-station robos; vehicles are `_kidList` children (robo → squad
+  commander → members), so the export walks the whole tree
 - `sectors` (if `sectors=1`, default off) — `w`, `h`, flat `owner` and
   `energy` arrays in row-major order
 

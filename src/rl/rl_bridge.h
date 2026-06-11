@@ -45,6 +45,12 @@ namespace RL
  *                                     at host station + (dx, 200, dz)
  *                                     (default 600,600) and transfers user
  *                                     control/view into it
+ *   ENEMY <vid> [dx] [dz]             no frame; creates vehicle <vid> owned by
+ *                                     the first enemy faction with a robo, at
+ *                                     the *user's* host station + (dx, 200, dz)
+ *                                     (default -600,-600), no control transfer;
+ *                                     replies {ok,gid,own,e,em} (a combat
+ *                                     target for the RL env)
  *   QUIT                              clean engine shutdown
  *
  * Engine -> client: one JSON object per line (see BuildState).

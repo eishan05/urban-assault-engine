@@ -249,11 +249,30 @@ static float ProbeRay(const vec3d &from, const vec3d &dir, float range)
 
 static void AppendUnit(std::string *s, NC_STACK_ypabact *u)
 {
+    vec3d v = u->_fly_dir * u->_fly_dir_length;
     *s += fmt::sprintf("{\"gid\":%u,\"ty\":%d,\"vid\":%d,\"own\":%d,\"st\":%d,"
-                       "\"e\":%d,\"em\":%d,\"p\":[%.2f,%.2f,%.2f]}",
+                       "\"e\":%d,\"em\":%d,\"p\":[%.2f,%.2f,%.2f],"
+                       "\"v\":[%.2f,%.2f,%.2f]}",
                        u->_gid, u->_bact_type, (int)u->_vehicleID, (int)u->_owner,
                        (int)u->_status, u->_energy, u->_energy_max,
-                       u->_position.x, u->_position.y, u->_position.z);
+                       u->_position.x, u->_position.y, u->_position.z,
+                       v.x, v.y, v.z);
+}
+
+// The world's _unitsList holds only top-level units (host-station
+// robos); vehicles hang off it as a tree of _kidList children
+// (robo -> squad commander -> squad members), so the units export
+// must recurse to include them.
+static void AppendUnitTree(std::string *s, NC_STACK_ypabact *u, bool *first)
+{
+    if ( !*first )
+        *s += ",";
+    *first = false;
+
+    AppendUnit(s, u);
+
+    for ( NC_STACK_ypabact *kid : u->GetKidList() )
+        AppendUnitTree(s, kid, first);
 }
 
 std::string TBridge::BuildState(int screenMode)
@@ -333,12 +352,7 @@ std::string TBridge::BuildState(int screenMode)
                 s += ",\"units\":[";
                 bool first = true;
                 for ( NC_STACK_ypabact *unit : ypaworld->_unitsList )
-                {
-                    if ( !first )
-                        s += ",";
-                    first = false;
-                    AppendUnit(&s, unit);
-                }
+                    AppendUnitTree(&s, unit, &first);
                 s += "]";
             }
 
@@ -598,6 +612,72 @@ bool TBridge::HandleCommand(const std::string &line, TInputState *inp, int scree
 
         ClearInput(inp);
         return true;
+    }
+
+    if ( cmd == "ENEMY" )
+    {
+        // Create a vehicle owned by an enemy faction near the user's
+        // host station, with no control transfer — a combat target for
+        // the RL env. Goes through the enemy robo's MakeSquad so the
+        // unit gets a proper owner/parent/host-station (a missing
+        // _parent segfaults AI targeting) and live AI (aggression 60,
+        // guarding its spawn cell). No frame is run; the reply carries
+        // the new unit's gid for damage/kill tracking via the units
+        // array.
+        int vid = -1;
+        ss >> vid;
+
+        float dx, dz;
+        const float dy = 200.0;
+        if ( !(ss >> dx) )
+            dx = -600.0;
+        if ( !(ss >> dz) )
+            dz = -600.0;
+
+        NC_STACK_ypabact *urobo = ypaworld ? ypaworld->_userRobo : NULL;
+
+        if ( screenMode != 2 || !urobo )
+        {
+            SendLine("{\"ok\":false,\"error\":\"ENEMY needs a running level\"}");
+            return false;
+        }
+
+        if ( vid < 0 || (size_t)vid >= ypaworld->_vhclProtos.size() ||
+             ypaworld->_vhclProtos[vid].model_id <= 0 )
+        {
+            SendLine(fmt::sprintf("{\"ok\":false,\"error\":\"bad vehicle id %d\"}", vid));
+            return false;
+        }
+
+        NC_STACK_yparobo *erobo = NULL;
+        for ( NC_STACK_ypabact *unit : ypaworld->_unitsList )
+        {
+            if ( unit->_owner != urobo->_owner && unit->_owner != 0 )
+            {
+                erobo = dynamic_cast<NC_STACK_yparobo *>(unit);
+                if ( erobo )
+                    break;
+            }
+        }
+
+        if ( !erobo )
+        {
+            SendLine("{\"ok\":false,\"error\":\"no enemy host station in level\"}");
+            return false;
+        }
+
+        vec3d pos = urobo->_position + vec3d(dx, dy, dz);
+        if ( !erobo->MakeSquad(std::vector<int>{vid}, pos, true) )
+        {
+            SendLine(fmt::sprintf("{\"ok\":false,\"error\":\"vehicle %d creation failed\"}", vid));
+            return false;
+        }
+
+        NC_STACK_ypabact *unit = erobo->_kidList.front();
+        SendLine(fmt::sprintf("{\"ok\":true,\"gid\":%u,\"own\":%d,\"e\":%d,\"em\":%d}",
+                              unit->_gid, (int)unit->_owner,
+                              unit->_energy, unit->_energy_max));
+        return false;
     }
 
     if ( cmd == "QUIT" )

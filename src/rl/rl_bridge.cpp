@@ -250,7 +250,7 @@ std::string TBridge::BuildState(int screenMode)
                                   "\"st\":%d,\"e\":%d,\"em\":%d,"
                                   "\"p\":[%.3f,%.3f,%.3f],\"v\":[%.3f,%.3f,%.3f],"
                                   "\"rot\":[%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f],"
-                                  "\"sec\":[%d,%d]}",
+                                  "\"sec\":[%d,%d],\"sec_h\":%.1f}",
                                   u->_gid, u->_bact_type, (int)u->_vehicleID, (int)u->_owner,
                                   (int)u->_status, u->_energy, u->_energy_max,
                                   u->_position.x, u->_position.y, u->_position.z,
@@ -258,7 +258,8 @@ std::string TBridge::BuildState(int screenMode)
                                   u->_rotation.m00, u->_rotation.m01, u->_rotation.m02,
                                   u->_rotation.m10, u->_rotation.m11, u->_rotation.m12,
                                   u->_rotation.m20, u->_rotation.m21, u->_rotation.m22,
-                                  u->_cellId.x, u->_cellId.y);
+                                  u->_cellId.x, u->_cellId.y,
+                                  u->_pSector ? u->_pSector->averg_height : 0.0);
             }
 
             NC_STACK_ypabact *r = ypaworld->_userRobo;
